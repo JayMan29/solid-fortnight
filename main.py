@@ -16,7 +16,7 @@ import numpy as np
 import pandas as pd
 
 from config import SETTINGS
-from universe import UNIVERSE, get_search_query
+from universe import UNIVERSE, get_search_terms
 from models.scoring_model import compute_composite_score, explain_score_change
 
 
@@ -153,8 +153,8 @@ def run_rank() -> None:
             fund_feats = {}
 
         try:
-            query = get_search_query(ticker)
-            articles = fetch_company_news(query, ticker, lookback_start, today, SETTINGS.news_api_key)
+            search_terms = get_search_terms(ticker)
+            articles = fetch_company_news(search_terms, ticker, lookback_start, today, SETTINGS.news_api_key)
             articles = remove_duplicate_articles(articles)
             news_feats = calculate_news_features(articles, today)
             articles = score_financial_sentiment(articles)
