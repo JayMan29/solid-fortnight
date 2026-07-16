@@ -1,24 +1,33 @@
 """
 News retrieval and near-duplicate removal.
 
-Uses NewsAPI (newsapi.org) by default. Swap in Polygon's news endpoint
-if you have that key instead -- the shape of `fetch_company_news`'s
-return value is what the rest of the pipeline depends on, so keep the
-column names (`published_at`, `source`, `title`, `description`, `url`)
-stable if you change providers.
+Uses the Currents API (currentsapi.services) -- free tier allows
+production/scheduled use (unlike NewsAPI.org's dev-only free tier).
+Docs: https://currentsapi.services/en/docs/search
 """
 from __future__ import annotations
 from datetime import date
 from typing import Any
+from urllib.parse import urlparse
 import pandas as pd
 import requests
 from rapidfuzz.fuzz import ratio
 
-NEWS_API_URL = "https://newsapi.org/v2/everything"
+CURRENTS_SEARCH_URL = "https://api.currentsapi.services/v1/search"
+
+
+def _domain_from_url(url: str | None) -> str | None:
+    if not url:
+        return None
+    try:
+        netloc = urlparse(url).netloc.lower()
+        return netloc.replace("www.", "") or None
+    except ValueError:
+        return None
 
 
 def fetch_company_news(
-    query: str,
+    search_terms: list[str],
     ticker: str,
     start_date: date,
     end_date: date,
@@ -26,35 +35,45 @@ def fetch_company_news(
     page_size: int = 100,
 ) -> pd.DataFrame:
     """
-    `query` should already be an alias-safe boolean query, e.g.
-    universe.get_search_query(ticker) -- NOT the raw ticker, since
-    tickers like "ON", "ALL", "AI" collide with common words.
+    `search_terms` should be the company name + known aliases (see
+    universe.get_search_terms) -- NOT the raw ticker, since tickers
+    like "ON", "ALL", "AI" collide with common words. Currents' free
+    tier doesn't reliably support boolean OR syntax, so we run one
+    request per alias and merge + dedupe the results.
     """
     if not api_key:
         raise RuntimeError("NEWS_API_KEY is not set")
-    params = {
-        "q": query,
-        "from": start_date.isoformat(),
-        "to": end_date.isoformat(),
-        "language": "en",
-        "sortBy": "publishedAt",
-        "pageSize": page_size,
-        "apiKey": api_key,
-    }
-    response = requests.get(NEWS_API_URL, params=params, timeout=30)
-    response.raise_for_status()
-    articles: list[dict[str, Any]] = response.json().get("articles", [])
-    rows = []
-    for article in articles:
-        rows.append({
-            "ticker": ticker,
-            "published_at": pd.to_datetime(article.get("publishedAt"), utc=True, errors="coerce"),
-            "source": (article.get("source") or {}).get("name"),
-            "title": article.get("title") or "",
-            "description": article.get("description") or "",
-            "url": article.get("url"),
-        })
-    return pd.DataFrame(rows)
+
+    headers = {"Authorization": api_key}
+    all_rows: list[dict[str, Any]] = []
+
+    for term in search_terms:
+        params = {
+            "keywords": term,
+            "language": "en",
+            "start_date": start_date.isoformat(),
+            "end_date": end_date.isoformat(),
+            "page_size": page_size,
+        }
+        response = requests.get(CURRENTS_SEARCH_URL, headers=headers, params=params, timeout=30)
+        response.raise_for_status()
+        payload = response.json()
+        if payload.get("status") != "ok":
+            continue
+        for article in payload.get("news", []):
+            all_rows.append({
+                "ticker": ticker,
+                "published_at": pd.to_datetime(article.get("published"), utc=True, errors="coerce"),
+                "source": _domain_from_url(article.get("url")),
+                "title": article.get("title") or "",
+                "description": article.get("description") or "",
+                "url": article.get("url"),
+            })
+
+    df = pd.DataFrame(all_rows)
+    if df.empty:
+        return df
+    return df.drop_duplicates(subset="url").reset_index(drop=True)
 
 
 def remove_duplicate_articles(articles: pd.DataFrame, similarity_threshold: int = 88) -> pd.DataFrame:
@@ -74,12 +93,12 @@ def remove_duplicate_articles(articles: pd.DataFrame, similarity_threshold: int 
 
 
 SOURCE_WEIGHTS = {
-    "reuters": 1.2,
-    "bloomberg": 1.2,
-    "the wall street journal": 1.2,
+    "reuters.com": 1.2,
+    "bloomberg.com": 1.2,
+    "wsj.com": 1.2,
     "sec.gov": 1.5,
-    "techcrunch": 0.8,
-    "business insider": 0.6,
+    "techcrunch.com": 0.8,
+    "businessinsider.com": 0.6,
 }
 DEFAULT_SOURCE_WEIGHT = 0.4
 
