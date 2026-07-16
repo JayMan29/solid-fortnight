@@ -34,10 +34,14 @@ python main.py rank
 
 This hits three external services:
 - `data.sec.gov` — free, no key, but requires a real User-Agent header
-- `newsapi.org` — free tier is limited (100 req/day, no historical depth);
-  fine for prototyping, not for a serious backtest
-- `api.anthropic.com` — used to turn news text into structured,
-  materiality-scored events instead of generic sentiment
+- `currentsapi.services` — free tier (1,000 requests/day, no card
+  required) and, unlike NewsAPI.org's free tier, its terms allow
+  scheduled/production use, which is what the GitHub Actions workflow
+  does
+- `api.anthropic.com` — optional; used to turn news text into
+  structured, materiality-scored events instead of generic sentiment.
+  If `ANTHROPIC_API_KEY` isn't set, this step is skipped and the rest
+  of the pipeline still runs.
 
 Price data comes from stooq.com (free, no key) with an optional yfinance
 fallback.
