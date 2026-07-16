@@ -1,0 +1,11 @@
+pandas>=2.0
+numpy>=1.24
+requests>=2.31
+scikit-learn>=1.3
+rapidfuzz>=3.5
+joblib>=1.3
+
+# Optional, only needed for specific features:
+yfinance>=0.2        # fallback price source in data/prices.py
+transformers>=4.35    # FinBERT sentiment in features/text_features.py
+torch>=2.0            # backend for transformers

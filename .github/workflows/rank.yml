@@ -1,0 +1,34 @@
+name: Run stock ranking
+
+on:
+  workflow_dispatch: {}          # lets you click "Run workflow" manually in the Actions tab
+  schedule:
+    - cron: "0 13 1 * *"          # 1st of each month, 9am ET / 13:00 UTC
+
+jobs:
+  rank:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run ranking
+        env:
+          SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
+          NEWS_API_KEY: ${{ secrets.NEWS_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: python main.py rank
+
+      - name: Upload ranking as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ranking-${{ github.run_number }}
+          path: output/ranking.csv
