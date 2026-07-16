@@ -46,3 +46,15 @@ def get_search_query(ticker: str) -> str:
     names = [entry.company_name, *entry.aliases]
     name_clause = " OR ".join(f'"{n}"' for n in names)
     return f"({name_clause})"
+
+
+def get_search_terms(ticker: str) -> list[str]:
+    """
+    Returns the company name + aliases as a plain list, for providers
+    (like Currents API on the free tier) that search one term per
+    request rather than accepting boolean OR syntax.
+    """
+    entry = UNIVERSE.get(ticker)
+    if entry is None:
+        raise KeyError(f"Unknown ticker: {ticker}. Add it to UNIVERSE first.")
+    return [entry.company_name, *entry.aliases]
